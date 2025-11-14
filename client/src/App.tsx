@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import Portal from "@/pages/portal";
+import Purchase from "@/pages/purchase";
 import AdminDashboard from "@/pages/admin-dashboard";
 import AdminGenerate from "@/pages/admin-generate";
 import AdminHistory from "@/pages/admin-history";
@@ -41,6 +42,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Portal} />
+      <Route path="/purchase" component={Purchase} />
       <Route path="/admin">
         {() => (
           <AdminLayout>

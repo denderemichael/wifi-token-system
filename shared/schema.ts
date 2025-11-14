@@ -28,7 +28,9 @@ export type Token = typeof tokens.$inferSelect;
 // Purchase token request from user
 export const purchaseTokenSchema = z.object({
   phoneNumber: z.string().min(10, "Phone number must be at least 10 digits"),
-  amount: z.number().min(1, "Amount must be at least $1"),
+  amount: z.union([z.number(), z.string()]).transform(val => 
+    typeof val === 'string' ? parseFloat(val) : val
+  ).pipe(z.number().min(0, "Amount must be at least $0")),
 });
 
 export type PurchaseTokenRequest = z.infer<typeof purchaseTokenSchema>;

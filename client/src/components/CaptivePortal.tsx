@@ -2,30 +2,39 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Wifi, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Wifi, CheckCircle2, AlertCircle, Loader2, CreditCard } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { apiRequest } from "@/lib/queryClient";
+import { Link } from "wouter";
 
 export function CaptivePortal() {
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token.trim()) return;
 
     setStatus("loading");
     
-    // todo: remove mock functionality
-    setTimeout(() => {
-      if (token.length >= 6) {
+    try {
+      const response = await apiRequest("POST", "/api/validate-token", { 
+        token: token.trim() 
+      });
+      const data = await response.json();
+
+      if (data.valid) {
         setStatus("success");
-        setMessage("Access granted! You are now connected to the network.");
+        setMessage(data.message || "Access granted! You are now connected to the network.");
       } else {
         setStatus("error");
-        setMessage("Invalid token. Please check and try again.");
+        setMessage(data.message || "Invalid or expired token.");
       }
-    }, 1500);
+    } catch (error: any) {
+      setStatus("error");
+      setMessage("Error validating token. Please try again.");
+    }
   };
 
   return (
@@ -92,7 +101,13 @@ export function CaptivePortal() {
           )}
 
           <div className="text-center text-xs text-muted-foreground pt-2">
-            <p>Need a token? Contact the administrator</p>
+            <p>Don't have a token?</p>
+            <Link href="/purchase">
+              <Button variant="ghost" className="h-auto p-0 text-xs" data-testid="link-purchase">
+                <CreditCard className="h-3 w-3 mr-1" />
+                Purchase Wi-Fi Access
+              </Button>
+            </Link>
           </div>
         </CardContent>
       </Card>

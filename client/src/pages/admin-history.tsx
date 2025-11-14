@@ -1,14 +1,28 @@
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AdminHistory() {
-  // todo: remove mock functionality
-  const history = [
-    { id: "1", token: "A8K9X2P4", created: "Nov 13, 10:30 AM", used: "Nov 13, 10:35 AM", expired: "Nov 13, 10:30 PM", status: "expired" },
-    { id: "2", token: "M3N7Q5R8", created: "Nov 13, 09:15 AM", used: "Nov 13, 09:20 AM", expired: "Nov 13, 09:15 PM", status: "expired" },
-    { id: "3", token: "L6T2Y9W3", created: "Nov 13, 08:00 AM", used: "Nov 13, 08:05 AM", expired: "Nov 13, 08:00 PM", status: "expired" },
-    { id: "4", token: "P4H8K3N2", created: "Nov 12, 03:45 PM", used: "Not used", expired: "Nov 13, 03:45 AM", status: "unused" },
-  ];
+  const { data: allTokens, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/tokens"],
+  });
+
+  const now = new Date();
+  const historyTokens = allTokens?.filter(t => 
+    new Date(t.expiresAt) < now || t.isRevoked
+  ).sort((a, b) => 
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  ) || [];
+
+  const formatDate = (date: string) => {
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(date));
+  };
 
   return (
     <div className="space-y-8">
@@ -27,33 +41,61 @@ export default function AdminHistory() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {history.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start gap-4 p-4 rounded-md border bg-card hover-elevate"
-                data-testid={`history-item-${item.id}`}
-              >
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center gap-3">
-                    <code className="font-mono text-sm font-medium">
-                      {item.token}
-                    </code>
-                    <Badge variant={item.status === "expired" ? "secondary" : "destructive"} className="text-xs">
-                      {item.status === "expired" ? "Expired" : "Unused"}
-                    </Badge>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    <span>Created: {item.created}</span>
-                    <span className="mx-2">•</span>
-                    <span>Used: {item.used}</span>
-                    <span className="mx-2">•</span>
-                    <span>Expired: {item.expired}</span>
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3, 4].map(i => (
+                <Skeleton key={i} className="h-24" />
+              ))}
+            </div>
+          ) : historyTokens.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No expired or revoked tokens yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {historyTokens.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-start gap-4 p-4 rounded-md border bg-card hover-elevate"
+                  data-testid={`history-item-${item.id}`}
+                >
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <code className="font-mono text-sm font-medium">
+                        {item.token}
+                      </code>
+                      <Badge 
+                        variant={item.isRevoked ? "destructive" : "secondary"} 
+                        className="text-xs"
+                      >
+                        {item.isRevoked ? "Revoked" : "Expired"}
+                      </Badge>
+                      {item.smsDelivered && (
+                        <Badge variant="outline" className="text-xs">
+                          SMS Delivered
+                        </Badge>
+                      )}
+                      {item.paymentIntentId !== "MANUAL_GENERATION" && (
+                        <Badge variant="outline" className="text-xs">
+                          ${item.amount}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      <span>Created: {formatDate(item.createdAt)}</span>
+                      <span className="mx-2">•</span>
+                      <span>Used: {item.usedAt ? formatDate(item.usedAt) : "Not used"}</span>
+                      <span className="mx-2">•</span>
+                      <span>Expired: {formatDate(item.expiresAt)}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Phone: {item.phoneNumber}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
