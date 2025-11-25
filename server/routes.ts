@@ -1,22 +1,13 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import Stripe from "stripe";
+import twilio from "twilio";
 import { storage } from "./storage";
 import { purchaseTokenSchema } from "@shared/schema";
 import { z } from "zod";
 
-// Initialize Stripe - will be optional if keys not provided
-let stripe: Stripe | null = null;
-if (process.env.STRIPE_SECRET_KEY) {
-  stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-    apiVersion: "2025-10-29.clover",
-  });
-}
-
 // Twilio client - optional if credentials not provided
 let twilioClient: any = null;
 if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
-  const twilio = require('twilio');
   twilioClient = twilio(
     process.env.TWILIO_ACCOUNT_SID,
     process.env.TWILIO_AUTH_TOKEN
@@ -53,61 +44,18 @@ async function sendTokenViaSMS(phoneNumber: string, tokenCode: string, tokenId: 
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
-  // Create payment intent for token purchase
-  app.post("/api/create-payment-intent", async (req, res) => {
+  // Purchase token with Zimbabwean payment method
+  app.post("/api/purchase-token", async (req, res) => {
     try {
-      const { amount, phoneNumber } = purchaseTokenSchema.parse(req.body);
-      
-      if (!stripe) {
-        return res.status(500).json({ 
-          message: "Payment processing not configured. Please add STRIPE_SECRET_KEY." 
-        });
+      const { amount, phoneNumber, paymentMethod } = req.body;
+
+      // Validate required fields
+      if (!phoneNumber || !paymentMethod || amount == null) {
+        return res.status(400).json({ message: "Phone number, payment method, and amount are required" });
       }
 
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(amount * 100), // Convert to cents
-        currency: "usd",
-        metadata: {
-          phoneNumber,
-        },
-      });
-
-      res.json({ clientSecret: paymentIntent.client_secret });
-    } catch (error: any) {
-      console.error('Payment intent creation error:', error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0].message });
-      }
-      res.status(500).json({ message: "Error creating payment intent: " + error.message });
-    }
-  });
-
-  // Webhook to handle successful payments
-  app.post("/api/webhook/stripe", async (req, res) => {
-    if (!stripe) {
-      return res.status(500).json({ message: "Stripe not configured" });
-    }
-
-    const sig = req.headers['stripe-signature'];
-    let event;
-
-    try {
-      // Use rawBody for webhook signature verification
-      const rawBody = (req as any).rawBody;
-      event = stripe.webhooks.constructEvent(
-        rawBody || req.body,
-        sig!,
-        process.env.STRIPE_WEBHOOK_SECRET || ''
-      );
-    } catch (err: any) {
-      console.error('Webhook signature verification failed:', err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    if (event.type === 'payment_intent.succeeded') {
-      const paymentIntent = event.data.object as Stripe.PaymentIntent;
-      const phoneNumber = paymentIntent.metadata.phoneNumber;
-      const amount = (paymentIntent.amount / 100).toString();
+      // Simulate payment processing (in real implementation, integrate with actual payment APIs)
+      console.log(`[PAYMENT SIMULATION] Processing ${paymentMethod} payment of $${amount} for ${phoneNumber}`);
 
       // Generate token and save to database
       const tokenCode = generateTokenCode();
@@ -117,7 +65,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         token: tokenCode,
         phoneNumber,
         amount: amount.toString(),
-        paymentIntentId: paymentIntent.id,
+        paymentMethod,
+        paymentIntentId: null, // Not using Stripe anymore
         expiresAt,
         usedAt: null,
         isRevoked: false,
@@ -131,9 +80,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Failed to send SMS, but token created:', error);
       }
-    }
 
-    res.json({ received: true });
+      res.json({ success: true, token: tokenCode });
+    } catch (error: any) {
+      console.error('Token purchase error:', error);
+      res.status(500).json({ message: "Error processing payment: " + error.message });
+    }
   });
 
   // Validate token (used by captive portal)
@@ -241,6 +193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         token: tokenCode,
         phoneNumber,
         amount: amount.toString(),
+        paymentMethod: "manual",
         paymentIntentId: "MANUAL_GENERATION",
         expiresAt,
         usedAt: null,
@@ -256,14 +209,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('SMS send failed:', error);
       }
 
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         token: tokenCode,
-        smsDelivered: token.smsDelivered 
+        smsDelivered: token.smsDelivered
       });
     } catch (error: any) {
       console.error('Token generation error:', error);
       res.status(500).json({ message: "Error generating token" });
+    }
+  });
+
+  // Send expiration notifications (admin)
+  app.post("/api/tokens/send-expiration-notifications", async (req, res) => {
+    try {
+      const expiredTokens = await storage.getExpiredTokens();
+
+      let sentCount = 0;
+      for (const token of expiredTokens) {
+        try {
+          // Send expiration SMS
+          if (twilioClient && process.env.TWILIO_PHONE_NUMBER) {
+            await twilioClient.messages.create({
+              body: `Your Wi-Fi access token (${token.token}) has expired. Please purchase a new token to continue accessing the network.`,
+              from: process.env.TWILIO_PHONE_NUMBER,
+              to: token.phoneNumber,
+            });
+          } else {
+            console.log(`[DEMO MODE] Would send expiration SMS to ${token.phoneNumber}: Your Wi-Fi access token (${token.token}) has expired.`);
+          }
+          sentCount++;
+        } catch (error) {
+          console.error(`Failed to send expiration SMS to ${token.phoneNumber}:`, error);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Sent expiration notifications to ${sentCount} users`
+      });
+    } catch (error: any) {
+      console.error('Error sending expiration notifications:', error);
+      res.status(500).json({ message: "Error sending notifications" });
     }
   });
 

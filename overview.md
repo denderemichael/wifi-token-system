@@ -8,7 +8,7 @@ A token-based Wi-Fi access control system where users purchase time-limited acce
 ### User Flow
 1. User visits captive portal (/)
 2. Clicks "Purchase Wi-Fi Access" to go to payment page (/purchase)
-3. Enters phone number and pays $5 for 12 hours of access
+3. Enters phone number and pays $1 for 12 hours of access
 4. Receives access token via SMS immediately after payment
 5. Returns to captive portal and enters token to connect
 6. Token is validated and grants Wi-Fi access for 12 hours

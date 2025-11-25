@@ -1,12 +1,13 @@
 import { db } from "./db";
 import { tokens, type Token, type InsertToken } from "@shared/schema";
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, lt } from "drizzle-orm";
 
 export interface IStorage {
   createToken(token: InsertToken): Promise<Token>;
   getTokenByCode(code: string): Promise<Token | undefined>;
   getActiveTokens(): Promise<Token[]>;
   getAllTokens(): Promise<Token[]>;
+  getExpiredTokens(): Promise<Token[]>;
   markTokenAsUsed(id: string): Promise<void>;
   revokeToken(id: string): Promise<void>;
   updateTokenSmsStatus(id: string, delivered: boolean, error?: string): Promise<void>;
@@ -43,6 +44,20 @@ export class DbStorage implements IStorage {
 
   async getAllTokens(): Promise<Token[]> {
     return db.select().from(tokens).orderBy(tokens.createdAt);
+  }
+
+  async getExpiredTokens(): Promise<Token[]> {
+    const now = new Date();
+    return db
+      .select()
+      .from(tokens)
+      .where(
+        and(
+          eq(tokens.isRevoked, false),
+          lt(tokens.expiresAt, now)
+        )
+      )
+      .orderBy(tokens.createdAt);
   }
 
   async markTokenAsUsed(id: string): Promise<void> {
