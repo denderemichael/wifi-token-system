@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,10 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Wifi, CheckCircle2, Loader2 } from "lucide-react";
 
-const PurchaseForm = ({ paymentMethod, phoneNumber, amount }: { paymentMethod: string; phoneNumber: string; amount: number }) => {
+const PurchaseForm = ({ paymentMethod, phoneNumber, network }: { paymentMethod: string; phoneNumber: string; network: Network }) => {
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [paymentData, setPaymentData] = useState<any>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,16 +20,16 @@ const PurchaseForm = ({ paymentMethod, phoneNumber, amount }: { paymentMethod: s
     try {
       const response = await apiRequest("POST", "/api/purchase-token", {
         phoneNumber,
-        amount,
+        networkId: network.id,
         paymentMethod
       });
       const data = await response.json();
 
       if (data.success) {
-        setPaymentSuccess(true);
+        setPaymentData(data);
         toast({
-          title: "Payment Successful!",
-          description: "Your access token will be sent to your phone via SMS shortly.",
+          title: "Payment Initiated!",
+          description: "Complete your payment using the instructions below. Your token will be sent via SMS once payment is confirmed.",
         });
       } else {
         throw new Error(data.message || "Payment failed");
@@ -45,25 +45,90 @@ const PurchaseForm = ({ paymentMethod, phoneNumber, amount }: { paymentMethod: s
     }
   };
 
-  if (paymentSuccess) {
+  if (paymentData) {
     return (
-      <div className="space-y-6 text-center">
-        <div className="flex justify-center">
-          <div className="rounded-full bg-green-500/10 p-6">
-            <CheckCircle2 className="h-16 w-16 text-green-600" />
+      <div className="space-y-6">
+        <div className="text-center">
+          <div className="flex justify-center mb-4">
+            <div className="rounded-full bg-blue-500/10 p-6">
+              <Wifi className="h-16 w-16 text-blue-600" />
+            </div>
           </div>
-        </div>
-        <div>
-          <h3 className="text-2xl font-bold mb-2">Payment Successful!</h3>
+          <h3 className="text-2xl font-bold mb-2">Complete Your Payment</h3>
           <p className="text-muted-foreground">
-            Your Wi-Fi access token has been sent to your phone via SMS.
-          </p>
-          <p className="text-muted-foreground mt-2">
-            Check your messages and enter the token on the Wi-Fi portal to connect.
+            Follow the instructions below to complete your ${network.tokenPrice} payment for {network.name}.
           </p>
         </div>
-        <Button onClick={() => window.location.href = "/"} data-testid="button-go-to-portal">
-          Go to Wi-Fi Portal
+
+        <div className="rounded-md border bg-muted/50 p-4">
+          <h4 className="font-semibold mb-2">Payment Instructions</h4>
+          {paymentMethod === 'paynow' && (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                1. Open your Paynow app or scan the QR code
+              </p>
+              <p className="text-sm text-muted-foreground">
+                2. Complete payment for ${network.tokenPrice}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                3. Your token will be sent via SMS once payment is confirmed
+              </p>
+              {paymentData.paymentUrl && (
+                <div className="mt-4">
+                  <Button asChild className="w-full">
+                    <a href={paymentData.paymentUrl} target="_blank" rel="noopener noreferrer">
+                      Open Paynow App
+                    </a>
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+          {paymentMethod === 'ecocash' && (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                1. Dial *151*1# on your phone
+              </p>
+              <p className="text-sm text-muted-foreground">
+                2. Select "Send Money"
+              </p>
+              <p className="text-sm text-muted-foreground">
+                3. Enter merchant code: {paymentData.merchantCode || 'Contact admin for code'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                4. Enter amount: ${network.tokenPrice}
+              </p>
+            </div>
+          )}
+          {paymentMethod === 'onemoney' && (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                1. Dial *100# on your phone
+              </p>
+              <p className="text-sm text-muted-foreground">
+                2. Select "Pay Merchant"
+              </p>
+              <p className="text-sm text-muted-foreground">
+                3. Enter merchant code: {paymentData.merchantCode || 'Contact admin for code'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                4. Enter amount: ${network.tokenPrice}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="text-center">
+          <p className="text-xs text-muted-foreground">
+            Reference: {paymentData.reference}
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            You will receive your access token via SMS immediately after payment confirmation
+          </p>
+        </div>
+
+        <Button onClick={() => window.location.href = "/"} variant="outline" className="w-full">
+          Back to Wi-Fi Portal
         </Button>
       </div>
     );
@@ -88,7 +153,7 @@ const PurchaseForm = ({ paymentMethod, phoneNumber, amount }: { paymentMethod: s
         <h4 className="font-semibold mb-2">Payment Instructions</h4>
         <p className="text-sm text-muted-foreground">{getPaymentInstructions()}</p>
         <p className="text-sm text-muted-foreground mt-2">
-          Amount: ${amount} | Phone: {phoneNumber}
+          Amount: ${network.tokenPrice} | Phone: {phoneNumber}
         </p>
       </div>
       <Button
@@ -113,12 +178,48 @@ const PurchaseForm = ({ paymentMethod, phoneNumber, amount }: { paymentMethod: s
   );
 };
 
+interface Network {
+  id: string;
+  name: string;
+  ssid: string;
+  tokenPrice: number;
+  tokenDuration: string;
+  isActive: boolean;
+}
+
 export default function Purchase() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
-  const [amount] = useState(5); // $5 for 12 hours
+  const [selectedNetworkId, setSelectedNetworkId] = useState("");
+  const [networks, setNetworks] = useState<Network[]>([]);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const loadNetworks = async () => {
+      try {
+        const response = await apiRequest("GET", "/api/networks/active");
+        const data = await response.json();
+        setNetworks(data);
+        if (data.length > 0) {
+          setSelectedNetworkId(data[0].id);
+        }
+      } catch (error) {
+        console.error('Failed to load networks:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load network options",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadNetworks();
+  }, [toast]);
+
+  const selectedNetwork = networks.find(n => n.id === selectedNetworkId);
 
   const handleContinueToPayment = () => {
     if (!phoneNumber || phoneNumber.length < 10) {
@@ -149,11 +250,11 @@ export default function Purchase() {
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold">Complete Payment</CardTitle>
             <CardDescription>
-              ${amount} for 12 hours of Wi-Fi access via {paymentMethod}
+              ${selectedNetwork?.tokenPrice} for {selectedNetwork?.tokenDuration} hours of Wi-Fi access via {paymentMethod}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <PurchaseForm paymentMethod={paymentMethod} phoneNumber={phoneNumber} amount={amount} />
+            <PurchaseForm paymentMethod={paymentMethod} phoneNumber={phoneNumber} network={selectedNetwork!} />
           </CardContent>
         </Card>
       </div>
@@ -172,7 +273,7 @@ export default function Purchase() {
           <div>
             <CardTitle className="text-2xl font-bold">Purchase Wi-Fi Access</CardTitle>
             <CardDescription className="text-sm mt-2">
-              Get 12 hours of secure Wi-Fi access for ${amount}
+              Get secure Wi-Fi access with flexible pricing options
             </CardDescription>
           </div>
         </CardHeader>
@@ -194,6 +295,22 @@ export default function Purchase() {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="network">WiFi Network</Label>
+            <Select value={selectedNetworkId} onValueChange={setSelectedNetworkId}>
+              <SelectTrigger className="h-12">
+                <SelectValue placeholder="Select WiFi network" />
+              </SelectTrigger>
+              <SelectContent>
+                {networks.map((network) => (
+                  <SelectItem key={network.id} value={network.id}>
+                    {network.name} - ${network.tokenPrice} for {network.tokenDuration} hours
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="payment-method">Payment Method</Label>
             <Select value={paymentMethod} onValueChange={setPaymentMethod}>
               <SelectTrigger className="h-12">
@@ -209,9 +326,12 @@ export default function Purchase() {
 
           <div className="rounded-md border bg-muted/50 p-4">
             <div className="flex justify-between items-center">
-              <span className="font-medium">12 Hours Wi-Fi Access</span>
-              <span className="text-2xl font-bold">${amount}</span>
+              <span className="font-medium">{selectedNetwork?.tokenDuration} Hours Wi-Fi Access</span>
+              <span className="text-2xl font-bold">${selectedNetwork?.tokenPrice}</span>
             </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              {selectedNetwork?.name} ({selectedNetwork?.ssid})
+            </p>
           </div>
 
           <Button

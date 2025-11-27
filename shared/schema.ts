@@ -35,3 +35,40 @@ export const purchaseTokenSchema = z.object({
 });
 
 export type PurchaseTokenRequest = z.infer<typeof purchaseTokenSchema>;
+
+// Settings table for configurable values
+export const settings = pgTable("settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: varchar("key").notNull().unique(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSettingSchema = createInsertSchema(settings).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertSetting = z.infer<typeof insertSettingSchema>;
+export type Setting = typeof settings.$inferSelect;
+
+// Networks table for multiple WiFi networks with different pricing
+export const networks = pgTable("networks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull().unique(),
+  ssid: varchar("ssid", { length: 32 }).notNull().unique(),
+  tokenPrice: decimal("token_price", { precision: 10, scale: 2 }).notNull(),
+  tokenDuration: varchar("token_duration").notNull(), // Store as string like "12h", "1d", etc.
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertNetworkSchema = createInsertSchema(networks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertNetwork = z.infer<typeof insertNetworkSchema>;
+export type Network = typeof networks.$inferSelect;

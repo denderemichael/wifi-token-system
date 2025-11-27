@@ -1,16 +1,50 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Wifi, CheckCircle2, AlertCircle, Loader2, CreditCard } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
 
+interface Network {
+  id: string;
+  name: string;
+  ssid: string;
+  tokenPrice: number;
+  tokenDuration: string;
+  isActive: boolean;
+}
+
 export function CaptivePortal() {
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [networks, setNetworks] = useState<Network[]>([]);
+  const [selectedNetworkId, setSelectedNetworkId] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadNetworks = async () => {
+      try {
+        const response = await apiRequest("GET", "/api/networks/active");
+        const data = await response.json();
+        setNetworks(data);
+        if (data.length > 0) {
+          setSelectedNetworkId(data[0].id);
+        }
+      } catch (error) {
+        console.error('Failed to load networks:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadNetworks();
+  }, []);
+
+  const selectedNetwork = networks.find(n => n.id === selectedNetworkId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +71,19 @@ export function CaptivePortal() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-primary/5 via-background to-accent/5">
+        <Card className="w-full max-w-md shadow-2xl">
+          <CardContent className="text-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+            Loading networks...
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-primary/5 via-background to-accent/5">
       <Card className="w-full max-w-md shadow-2xl">
@@ -47,13 +94,30 @@ export function CaptivePortal() {
             </div>
           </div>
           <div>
-            <CardTitle className="text-2xl font-bold">Welcome to SecureNet</CardTitle>
+            <CardTitle className="text-2xl font-bold">Welcome to {selectedNetwork?.name || 'WiFi Network'}</CardTitle>
             <CardDescription className="text-sm mt-2">
-              Enter your access token to connect for 12 hours
+              Enter your access token to connect for {selectedNetwork?.tokenDuration || 'multiple'} hours
             </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          {networks.length > 1 && (
+            <div className="space-y-2">
+              <Label htmlFor="network-select">Select Network</Label>
+              <Select value={selectedNetworkId} onValueChange={setSelectedNetworkId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select network" />
+                </SelectTrigger>
+                <SelectContent>
+                  {networks.map((network) => (
+                    <SelectItem key={network.id} value={network.id}>
+                      {network.name} ({network.ssid}) - ${network.tokenPrice} for {network.tokenDuration} hours
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {status === "success" ? (
             <Alert className="border-green-500/50 bg-green-500/10">
               <CheckCircle2 className="h-4 w-4 text-green-600" />

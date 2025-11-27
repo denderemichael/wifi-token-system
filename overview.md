@@ -32,8 +32,8 @@ A token-based Wi-Fi access control system where users purchase time-limited acce
 ### Backend
 - Express.js
 - PostgreSQL database (Neon)
-- Stripe for payment processing
-- Twilio for SMS delivery
+- paynow for payment processing
+-AfricasTalking  for SMS delivery
 - Drizzle ORM for database management
 
 ## Database Schema
